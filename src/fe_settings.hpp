@@ -216,7 +216,9 @@ public:
 	void save_state();
 
 	FeInputMap::Command map_input( const sf::Event &e );
+	FeInputMap::Command map_input( const ManyMouseEvent &e );
 	bool config_map_input( const sf::Event &e, std::string &s, FeInputMap::Command &conflict );
+	bool config_map_input( const ManyMouseEvent &e, std::string &s, FeInputMap::Command &conflict );
 
 	bool get_current_state( FeInputMap::Command c );
 	void get_input_mappings( std::vector < FeMapping > &l ) const { m_inputmap.get_mappings( l ); };
@@ -263,6 +265,7 @@ public:
 
 	bool select_last_launch();
 	int get_joy_thresh() const { return m_joy_thresh; }
+	int get_mouse_thresh() const { return m_mouse_thresh; }
 	void init_mouse_capture( int window_x, int window_y );
 	bool test_mouse_reset( int mouse_x, int mouse_y ) const;
 

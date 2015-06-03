@@ -189,6 +189,73 @@ FeInputSource::FeInputSource( Type t, int c )
 {
 }
 
+FeInputSource::FeInputSource( const ManyMouseEvent &mme, const sf::IntRect &mc_rect, const int mouse_thresh )
+	: m_type( Mouse ),
+	m_code( 0 )
+{
+	switch ( mme.type )
+	{
+		case MANYMOUSE_EVENT_RELMOTION:
+			if ( abs( mme.value ) > mouse_thresh )
+			{
+				if ( mme.item == 0 ) { // X
+					if ( mme.value < 0 )
+						m_code = MouseLeft;
+					else
+						m_code = MouseRight;
+				} else {
+					if ( mme.value < 0 )
+						m_code = MouseUp;
+					else
+						m_code = MouseDown;
+				}
+			}
+			else
+			{
+				m_type = Unsupported;
+			}
+			break;
+
+		case MANYMOUSE_EVENT_SCROLL:
+			if ( mme.item == 0 ) {
+				if ( mme.value > 0 )
+					m_code = MouseWheelUp;
+				else
+					m_code = MouseWheelDown;
+			} else {
+				m_type = Unsupported;
+				// TODO
+				//if ( mme.value > 0 )
+				//	m_code = MouseWheelRight;
+				//else
+				//	m_code = MouseWheelLeft;
+			}
+			break;
+
+		case MANYMOUSE_EVENT_BUTTON:
+			m_value = mme.value; // Button state (1 = pressed, 0 = depressed)
+
+			if ( mme.item == 0 )
+				m_code = MouseBLeft;
+			else if ( mme.item == 1 )
+				m_code = MouseBRight;
+			else if ( mme.item == 2 )
+				m_code = MouseBMiddle;
+			else if ( mme.item == 3 )
+				m_code = MouseBX1;
+			else if ( mme.item == 4 )
+				m_code = MouseBX2;
+			else
+				m_type = Unsupported;
+
+			break;
+
+		default:
+			m_type = Unsupported;
+			break;
+	}
+}
+
 FeInputSource::FeInputSource( const sf::Event &e, const sf::IntRect &mc_rect, const int joy_thresh )
 	: m_type( Unsupported ),
 	m_code( 0 )
@@ -226,50 +293,6 @@ FeInputSource::FeInputSource( const sf::Event &e, const sf::IntRect &mc_rect, co
 					default:
 						ASSERT( 0 ); // unhandled joystick axis encountered
 				}
-			}
-			break;
-
-		case sf::Event::MouseMoved:
-			if ( e.mouseMove.x < mc_rect.left )
-			{
-				m_type = Mouse;
-				m_code = MouseLeft;
-			}
-			else if ( e.mouseMove.y < mc_rect.top )
-			{
-				m_type = Mouse;
-				m_code = MouseUp;
-			}
-			else if ( e.mouseMove.x > mc_rect.left + mc_rect.width )
-			{
-				m_type = Mouse;
-				m_code = MouseRight;
-			}
-			else if ( e.mouseMove.y > mc_rect.top + mc_rect.height )
-			{
-				m_type = Mouse;
-				m_code = MouseDown;
-			}
-			break;
-
-		case sf::Event::MouseWheelMoved:
-			m_type = Mouse;
-			if ( e.mouseWheel.delta > 0 )
-				m_code=MouseWheelUp;
-			else
-				m_code=MouseWheelDown;
-			break;
-
-		case sf::Event::MouseButtonPressed:
-			m_type = Mouse;
-			switch ( e.mouseButton.button )
-			{
-				case sf::Mouse::Left: m_code=MouseBLeft; break;
-				case sf::Mouse::Right: m_code=MouseBRight; break;
-				case sf::Mouse::Middle: m_code=MouseBMiddle; break;
-				case sf::Mouse::XButton1: m_code=MouseBX1; break;
-				case sf::Mouse::XButton2: m_code=MouseBX2; break;
-				default: break;
 			}
 			break;
 
@@ -403,12 +426,13 @@ bool FeInputSource::get_current_state( int joy_thresh ) const
 	{
 		switch ( m_code )
 		{
-		case MouseBLeft: return sf::Mouse::isButtonPressed( sf::Mouse::Left );
-		case MouseBRight: return sf::Mouse::isButtonPressed( sf::Mouse::Right );
-		case MouseBMiddle: return sf::Mouse::isButtonPressed( sf::Mouse::Middle );
-		case MouseBX1: return sf::Mouse::isButtonPressed( sf::Mouse::XButton1 );
-		case MouseBX2: return sf::Mouse::isButtonPressed( sf::Mouse::XButton2 );
-		default: return false; // mouse moves and wheels are not supported
+		case MouseBLeft:
+		case MouseBRight:
+		case MouseBMiddle:
+		case MouseBX1:
+		case MouseBX2:
+			return ( m_value ); // 1 = pressed, 0 = depressed
+		default: return false;
 		}
 	}
 	else // Joysticks
@@ -449,10 +473,7 @@ int FeInputSource::get_current_pos() const
 {
 	if ( m_type == Mouse )
 	{
-		if (( m_code == MouseUp ) || ( m_code == MouseDown ))
-			return sf::Mouse::getPosition().y;
-		else if (( m_code == MouseLeft ) || ( m_code == MouseRight ))
-			return sf::Mouse::getPosition().x;
+		// TODO: ManyMouse doesn't support position
 	}
 	else if (( m_type >= Joystick0 ) && ( m_code < JoyButton0 ))
 	{
@@ -630,6 +651,21 @@ void FeInputMap::default_mappings()
 		m_map[ FeInputSource( dmap[i].type, dmap[i].code ) ] = dmap[i].comm;
 		i++;
 	}
+}
+
+FeInputMap::Command FeInputMap::map_input( const ManyMouseEvent &mme, const sf::IntRect &mc_rect, const int mouse_thresh )
+{
+	FeInputSource index = FeInputSource( mme, mc_rect, mouse_thresh );
+	if ( index.get_type() == FeInputSource::Unsupported )
+		return LAST_COMMAND;
+
+	std::map< FeInputSource, Command >::const_iterator it;
+	it = m_map.find( index );
+
+	if ( it == m_map.end() )
+		return LAST_COMMAND;
+
+	return (*it).second;
 }
 
 FeInputMap::Command FeInputMap::map_input( const sf::Event &e, const sf::IntRect &mc_rect, const int joy_thresh )
