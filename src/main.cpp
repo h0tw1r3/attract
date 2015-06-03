@@ -32,6 +32,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <manymouse/manymouse.h>
 
 #ifndef NO_MOVIE
 #include <Audio/AudioDevice.hpp>
@@ -351,7 +352,17 @@ int main(int argc, char *argv[])
 	FeInputMap::Command move_state( FeInputMap::LAST_COMMAND );
 	sf::Clock move_timer;
 	sf::Event move_event;
+	int move_event_type;
+	ManyMouseEvent mouse_event;
+
 	int move_last_triggered( 0 );
+
+	const int available_mice = ManyMouse_Init();
+	int i;
+	if (available_mice < 0) {
+		std::cerr << "Error initializing mouse api." << std::endl;
+		return 1;
+	}
 
 	// go straight into config mode if there are no lists configured for
 	// display
@@ -448,74 +459,80 @@ int main(int argc, char *argv[])
 
 		FeInputMap::Command c;
 		sf::Event ev;
-		while ( feVM.poll_command( c, ev ) )
+		ManyMouseEvent mmev;
+		int event_type;
+		while ( feVM.poll_command( c, ev, mmev, event_type ) )
 		{
 			//
 			// Special case handling based on event type
 			//
-			switch ( ev.type )
+			if ( event_type == EventProvider::SFML )
 			{
-				case sf::Event::Closed:
-					exit_selected = true;
-					break;
+				switch ( ev.type )
+				{
+					case sf::Event::Closed:
+						exit_selected = true;
+						break;
 
-				case sf::Event::MouseMoved:
-					if ( feSettings.test_mouse_reset( ev.mouseMove.x, ev.mouseMove.y ))
-					{
-						// We reset the mouse if we are capturing it and it has moved
-						// outside of its bounding box
+					case sf::Event::KeyPressed:
+					case sf::Event::JoystickButtonPressed:
 						//
-						sf::Vector2u s = window.getSize();
-						sf::Mouse::setPosition( sf::Vector2i( s.x / 2, s.y / 2 ), window );
-					}
-					break;
+						// We always want to reset the screen saver on these events,
+						// even if they aren't mapped otherwise (mapped events cause
+						// a reset too)
+						//
+						if (( c == FeInputMap::LAST_COMMAND )
+								&& ( feVM.reset_screen_saver() ))
+							redraw = true;
+						break;
 
-				case sf::Event::KeyPressed:
-				case sf::Event::MouseButtonPressed:
-				case sf::Event::JoystickButtonPressed:
-					//
-					// We always want to reset the screen saver on these events,
-					// even if they aren't mapped otherwise (mapped events cause
-					// a reset too)
-					//
-					if (( c == FeInputMap::LAST_COMMAND )
-							&& ( feVM.reset_screen_saver() ))
+					case sf::Event::GainedFocus:
+					case sf::Event::Resized:
 						redraw = true;
-					break;
-
-				case sf::Event::GainedFocus:
-				case sf::Event::Resized:
-					redraw = true;
-					break;
+						break;
 
 
-				case sf::Event::JoystickMoved:
-					if ( c == FeInputMap::LAST_COMMAND )
-					{
-						if (( (int)ev.joystickMove.joystickId == guard_joyid )
-							&& ( ev.joystickMove.axis == guard_axis ))
+					case sf::Event::JoystickMoved:
+						if ( c == FeInputMap::LAST_COMMAND )
 						{
-							// Reset the joystick guard because the axis we are guarding has moved
-							// below the joystick threshold
-							guard_joyid = -1;
-							guard_axis = -1;
+							if (( (int)ev.joystickMove.joystickId == guard_joyid )
+								&& ( ev.joystickMove.axis == guard_axis ))
+							{
+								// Reset the joystick guard because the axis we are guarding has moved
+								// below the joystick threshold
+								guard_joyid = -1;
+								guard_axis = -1;
+							}
 						}
-					}
-					else
-					{
-						// Only allow one mapped "Joystick Moved" input through at a time
-						//
-						if ( guard_joyid != -1 )
-							continue;
+						else
+						{
+							// Only allow one mapped "Joystick Moved" input through at a time
+							//
+							if ( guard_joyid != -1 )
+								continue;
 
-						guard_joyid = ev.joystickMove.joystickId;
-						guard_axis = ev.joystickMove.axis;
-					}
-					break;
+							guard_joyid = ev.joystickMove.joystickId;
+							guard_axis = ev.joystickMove.axis;
+						}
+						break;
 
-				case sf::Event::Count:
-				default:
-					break;
+					case sf::Event::Count:
+					default:
+						break;
+				}
+			}
+			else if ( event_type == EventProvider::MANYMOUSE )
+			{
+				switch ( mmev.type )
+				{
+					case MANYMOUSE_EVENT_BUTTON:
+						if (( c == FeInputMap::LAST_COMMAND )
+								&& ( feVM.reset_screen_saver() ))
+							redraw = true;
+						break;
+					default:
+						break;
+				}
 			}
 
 			if (( c == FeInputMap::LAST_COMMAND )
@@ -533,6 +550,8 @@ int main(int argc, char *argv[])
 				move_state = c;
 				move_timer.restart();
 				move_event = ev;
+				mouse_event = mmev;
+				move_event_type = event_type;
 			}
 
 			//
@@ -720,39 +739,49 @@ int main(int argc, char *argv[])
 		{
 			bool cont=false;
 
-			switch ( move_event.type )
+			if ( move_event_type == EventProvider::SFML )
 			{
-			case sf::Event::KeyPressed:
-				if ( sf::Keyboard::isKeyPressed( move_event.key.code ) )
-					cont=true;
-				break;
-
-			case sf::Event::MouseButtonPressed:
-				if ( sf::Mouse::isButtonPressed( move_event.mouseButton.button ) )
-					cont=true;
-				break;
-
-			case sf::Event::JoystickButtonPressed:
-				if ( sf::Joystick::isButtonPressed(
-						move_event.joystickButton.joystickId,
-						move_event.joystickButton.button ) )
-					cont=true;
-				break;
-
-			case sf::Event::JoystickMoved:
+				switch ( move_event.type )
 				{
-					sf::Joystick::update();
-
-					float pos = sf::Joystick::getAxisPosition(
-							move_event.joystickMove.joystickId,
-							move_event.joystickMove.axis );
-					if ( abs( pos ) > feSettings.get_joy_thresh() )
+				case sf::Event::KeyPressed:
+					if ( sf::Keyboard::isKeyPressed( move_event.key.code ) )
 						cont=true;
-				}
-				break;
+					break;
 
-			default:
-				break;
+				case sf::Event::JoystickButtonPressed:
+					if ( sf::Joystick::isButtonPressed(
+							move_event.joystickButton.joystickId,
+							move_event.joystickButton.button ) )
+						cont=true;
+					break;
+
+				case sf::Event::JoystickMoved:
+					{
+						sf::Joystick::update();
+
+						float pos = sf::Joystick::getAxisPosition(
+								move_event.joystickMove.joystickId,
+								move_event.joystickMove.axis );
+						if ( abs( pos ) > feSettings.get_joy_thresh() )
+							cont=true;
+					}
+					break;
+
+				default:
+					break;
+				}
+			}
+			else if ( event_type == EventProvider::MANYMOUSE )
+			{
+				switch ( mouse_event.type )
+				{
+				case MANYMOUSE_EVENT_BUTTON:
+					if ( mouse_event.value )
+						cont=true;
+					break;
+				default:
+					break;
+				}
 			}
 
 			if ( cont )

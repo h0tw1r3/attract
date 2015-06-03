@@ -201,7 +201,7 @@ FeSettings::FeSettings( const std::string &config_path,
 	m_last_launch_filter( 0 ),
 	m_last_launch_rom( 0 ),
 	m_joy_thresh( 75 ),
-	m_mouse_thresh( 10 ),
+	m_mouse_thresh( 50 ),
 	m_displays_menu_exit( true ),
 	m_hide_brackets( false ),
 	m_autolaunch_last_game( false ),
@@ -601,6 +601,11 @@ FeInputMap::Command FeSettings::map_input( const sf::Event &e )
 	return m_inputmap.map_input( e, m_mousecap_rect, m_joy_thresh );
 }
 
+FeInputMap::Command FeSettings::map_input( const ManyMouseEvent &mme )
+{
+	return m_inputmap.map_input( mme, m_mousecap_rect, m_mouse_thresh );
+}
+
 bool FeSettings::config_map_input( const sf::Event &e, std::string &s, FeInputMap::Command &conflict )
 {
 	FeInputSource index( e, m_mousecap_rect, m_joy_thresh );
@@ -610,6 +615,18 @@ bool FeSettings::config_map_input( const sf::Event &e, std::string &s, FeInputMa
 	s = index.as_string();
 
 	conflict = map_input( e );
+	return true;
+}
+
+bool FeSettings::config_map_input( const ManyMouseEvent &mme, std::string &s, FeInputMap::Command &conflict )
+{
+	FeInputSource index( mme, m_mousecap_rect, m_mouse_thresh );
+	if ( index.get_type() == FeInputSource::Unsupported )
+		return false;
+
+	s = index.as_string();
+
+	conflict = map_input( mme );
 	return true;
 }
 

@@ -116,19 +116,26 @@ void FeVM::set_overlay( FeOverlay *feo )
 	m_overlay = feo;
 }
 
-bool FeVM::poll_command( FeInputMap::Command &c, sf::Event &ev )
+bool FeVM::poll_command( FeInputMap::Command &c, sf::Event &ev, ManyMouseEvent &mmev, int &p )
 {
 	if ( !m_posted_commands.empty( ))
 	{
 		c = (FeInputMap::Command)m_posted_commands.front();
 		m_posted_commands.pop();
 		ev.type = sf::Event::Count;
-
+		p = EventProvider::SFML;
 		return true;
 	}
 	else if ( m_window.pollEvent( ev ) )
 	{
 		c = m_feSettings->map_input( ev );
+		p = EventProvider::SFML;
+		return true;
+	}
+	else if ( ManyMouse_PollEvent( &mmev ) )
+	{
+		c = m_feSettings->map_input( mmev );
+		p = EventProvider::MANYMOUSE;
 		return true;
 	}
 

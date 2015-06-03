@@ -26,6 +26,7 @@
 #include "fe_util.hpp"
 #include "fe_listbox.hpp"
 #include <SFML/Graphics.hpp>
+#include <manymouse/manymouse.h>
 #include <iostream>
 #include <fstream>
 
@@ -125,8 +126,10 @@ public:
 	int &sel;				// [in,out] selection counter
 	int default_sel;	// [in] default selection
 	int max_sel;		// [in] maximum selection
+	int move_event_type;
 
 	sf::Event move_event;
+	ManyMouseEvent mouse_event;
 	sf::Clock move_timer;
 	FeInputMap::Command move_command;
 };
@@ -527,6 +530,11 @@ void FeOverlay::input_map_dialog(
 	{
 		// no op
 	}
+	ManyMouseEvent mme;
+	while ( ManyMouse_PollEvent( &mme ) )
+	{
+		// no op
+	}
 
 	bool redraw=true;
 	m_overlay_is_on = true;
@@ -543,6 +551,15 @@ void FeOverlay::input_map_dialog(
 			}
 
 			if ( m_feSettings.config_map_input( ev, map_str, conflict ) )
+			{
+				m_overlay_is_on = false;
+				return;
+			}
+		}
+
+		while ( ManyMouse_PollEvent( &mme ) )
+		{
+			if ( m_feSettings.config_map_input( mme, map_str, conflict ) )
 			{
 				m_overlay_is_on = false;
 				return;
@@ -855,6 +872,16 @@ bool FeOverlay::check_for_cancel()
 			return true;
 	}
 
+	ManyMouseEvent mme;
+	while ( ManyMouse_PollEvent( &mme ) )
+	{
+		FeInputMap::Command c = m_feSettings.map_input( mme );
+
+		if (( c == FeInputMap::ExitMenu )
+				|| ( c == FeInputMap::ExitNoMenu ))
+			return true;
+	}
+
 	return false;
 }
 
@@ -874,6 +901,7 @@ bool FeOverlay::event_loop( FeEventLoopCtx &ctx )
 		while (m_wnd.pollEvent(ev))
 		{
 			FeInputMap::Command c = m_feSettings.map_input( ev );
+			ctx.move_event_type = EventProvider::SFML;
 
 			switch( c )
 			{
@@ -914,6 +942,51 @@ bool FeOverlay::event_loop( FeEventLoopCtx &ctx )
 			}
 		}
 
+		ManyMouseEvent mmev;
+		while ( ManyMouse_PollEvent( &mmev ) )
+		{
+			ctx.move_event_type = EventProvider::MANYMOUSE;
+			FeInputMap::Command c = m_feSettings.map_input( mmev );
+
+			switch( c )
+			{
+			case FeInputMap::ExitMenu:
+				ctx.sel = ctx.default_sel;
+				return true;
+			case FeInputMap::ExitNoMenu:
+				ctx.sel = -1;
+				return true;
+			case FeInputMap::Select:
+				return true;
+			case FeInputMap::Up:
+			case FeInputMap::PageUp:
+				if ( ctx.sel > 0 )
+					ctx.sel--;
+				else
+					ctx.sel=ctx.max_sel;
+
+				ctx.mouse_event = mmev;
+				ctx.move_command = FeInputMap::Up;
+				ctx.move_timer.restart();
+				return false;
+
+			case FeInputMap::Down:
+			case FeInputMap::PageDown:
+				if ( ctx.sel < ctx.max_sel )
+					ctx.sel++;
+				else
+					ctx.sel = 0;
+
+				ctx.mouse_event = mmev;
+				ctx.move_command = FeInputMap::Down;
+				ctx.move_timer.restart();
+				return false;
+
+			default:
+				break;
+			}
+		}
+
 		if ( m_fePresent.tick() )
 			redraw = true;
 
@@ -936,39 +1009,53 @@ bool FeOverlay::event_loop( FeEventLoopCtx &ctx )
 		{
 			bool cont=false;
 
-			switch ( ctx.move_event.type )
+			if ( ctx.move_event_type == EventProvider::SFML )
 			{
-			case sf::Event::KeyPressed:
-				if ( sf::Keyboard::isKeyPressed( ctx.move_event.key.code ) )
-					cont=true;
-				break;
-
-			case sf::Event::MouseButtonPressed:
-				if ( sf::Mouse::isButtonPressed( ctx.move_event.mouseButton.button ) )
-					cont=true;
-				break;
-
-			case sf::Event::JoystickButtonPressed:
-				if ( sf::Joystick::isButtonPressed(
-						ctx.move_event.joystickButton.joystickId,
-						ctx.move_event.joystickButton.button ) )
-					cont=true;
-				break;
-
-			case sf::Event::JoystickMoved:
+				switch ( ctx.move_event.type )
 				{
-					sf::Joystick::update();
-
-					float pos = sf::Joystick::getAxisPosition(
-							ctx.move_event.joystickMove.joystickId,
-							ctx.move_event.joystickMove.axis );
-					if ( abs( pos ) > m_feSettings.get_joy_thresh() )
+				case sf::Event::KeyPressed:
+					if ( sf::Keyboard::isKeyPressed( ctx.move_event.key.code ) )
 						cont=true;
-				}
-				break;
+					break;
 
-			default:
-				break;
+				case sf::Event::JoystickButtonPressed:
+					if ( sf::Joystick::isButtonPressed(
+							ctx.move_event.joystickButton.joystickId,
+							ctx.move_event.joystickButton.button ) )
+						cont=true;
+					break;
+
+				case sf::Event::JoystickMoved:
+					{
+						sf::Joystick::update();
+
+						float pos = sf::Joystick::getAxisPosition(
+								ctx.move_event.joystickMove.joystickId,
+								ctx.move_event.joystickMove.axis );
+						if ( abs( pos ) > m_feSettings.get_joy_thresh() )
+							cont=true;
+					}
+					break;
+
+				default:
+					break;
+				}
+			}
+			else if ( ctx.move_event_type == EventProvider::MANYMOUSE )
+			{
+				switch ( ctx.mouse_event.type )
+				{
+				case MANYMOUSE_EVENT_RELMOTION:
+					if ( abs( ctx.mouse_event.value ) > m_feSettings.get_mouse_thresh() )
+						cont=true;
+					break;
+				case MANYMOUSE_EVENT_BUTTON:
+					if ( ctx.mouse_event.value )
+						cont=true;
+					break;
+				default:
+					break;
+				}
 			}
 
 			if ( cont )

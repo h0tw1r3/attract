@@ -31,6 +31,12 @@
 #include <cassert>
 #endif
 
+namespace EventProvider
+{
+	const int	SFML 				= 1;
+	const int	MANYMOUSE			= 2;
+};
+
 //
 // Utility functions for processing config files:
 //

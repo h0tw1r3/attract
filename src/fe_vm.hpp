@@ -88,7 +88,7 @@ public:
 	void set_overlay( FeOverlay *feo );
 
 	void flag_redraw() { m_redraw_triggered = true; };
-	bool poll_command( FeInputMap::Command &c, sf::Event &ev );
+	bool poll_command( FeInputMap::Command &c, sf::Event &ev, ManyMouseEvent &mme, int &event_type );
 	void clear(); // override of base class clear()
 
 	// Scripting functionality
