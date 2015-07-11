@@ -47,7 +47,7 @@
 
 CC=$(CROSS)gcc
 CPP=$(CROSS)g++
-CFLAGS=
+CFLAGS=-Wl,--as-needed
 PKG_CONFIG=$(CROSS)pkg-config
 AR=$(CROSS)ar
 ARFLAGS=rc
