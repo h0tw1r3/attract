@@ -1,3 +1,5 @@
+#include "config.h"
+
 #define STRINGIZE_HELPER(...) #__VA_ARGS__
 #define STRINGIZE(x) STRINGIZE_HELPER(x)
 

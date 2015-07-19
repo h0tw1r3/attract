@@ -20,6 +20,7 @@
  *
  */
 
+#include "config.h"
 #include "fe_vm.hpp"
 #include "fe_settings.hpp"
 #include "fe_present.hpp"
@@ -500,11 +501,7 @@ bool FeVM::on_new_layout()
 		.Const( _SC("OS"), get_OS_string() )
 		.Const( _SC("ShadersAvailable"), sf::Shader::isAvailable() )
 		.Const( _SC("FeConfigDirectory"), m_feSettings->get_config_dir().c_str() )
-#ifdef DATA_PATH
 		.Const( _SC("FeDataDirectory"), DATA_PATH )
-#else
-		.Const( _SC("FeDataDirectory"), "" )
-#endif
 
 		.Enum( _SC("Style"), Enumeration()
 			.Const( _SC("Regular"), sf::Text::Regular )
